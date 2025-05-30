@@ -681,4 +681,31 @@
     }
   }
 
-  // Показать т
+  // Показать трейлер
+  function watchTrailer() {
+    if (!currentMovie) return;
+    
+    const query = encodeURIComponent(currentMovie.title + " трейлер");
+    const url = `https://www.youtube.com/results?search_query=${query}`;
+    window.open(url, '_blank');
+  }
+
+  // Инициализация обработчиков событий
+  document.getElementById('getMovieBtn').addEventListener('click', getRandomMovie);
+  document.getElementById('addMovieBtn').addEventListener('click', addUserMovie);
+  document.getElementById('likeBtn').addEventListener('click', () => rateMovie(true));
+  document.getElementById('dislikeBtn').addEventListener('click', () => rateMovie(false));
+  document.getElementById('trailerBtn').addEventListener('click', watchTrailer);
+
+  // Инициализация при загрузке
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Загружаем пользовательские фильмы
+    await loadCustomMovies();
+    updateTopMovies();
+    
+    // Показать случайный фильм при загрузке
+    setTimeout(getRandomMovie, 1000);
+  });
+</script>
+</body>
+</html>
