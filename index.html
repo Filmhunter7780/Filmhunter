@@ -323,7 +323,7 @@
     try {
       // Рассчитываем баланс с учётом истории
       const totalShown = shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length;
-      const customRatio = totalShown > 3 ? 0.2 : 0.4;
+      const customRatio = totalShown > 3 ? 0.2 : 0.4; // После 3 просмотров уменьшаем долю пользовательских
       const useCustom = Math.random() < customRatio;
       
       let movie = null;
@@ -343,34 +343,33 @@
       
       // Если пользовательский не найден, берём TMDB
       if (!movie) {
-        const tmdbMovies = await getRandomTMDBMovieBatch();
-        if (tmdbMovies.length > 0) {
-          const availableTmdbMovies = tmdbMovies.filter(m => 
+        const availableTmdbMovies = await getRandomTMDBMovieBatch();
+        if (availableTmdbMovies.length > 0) {
+          const filteredMovies = availableTmdbMovies.filter(m => 
             !shownMoviesHistory.tmdb.includes(m.id)
           );
           
-          const movieToShow = availableTmdbMovies.length > 0 ? 
-            availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)] :
-            tmdbMovies[Math.floor(Math.random() * tmdbMovies.length)];
+          const movieToShow = filteredMovies.length > 0 ? 
+            filteredMovies[Math.floor(Math.random() * filteredMovies.length)] :
+            availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
             
           movie = movieToShow;
           shownMoviesHistory.tmdb.push(movie.id);
         }
       }
       
-      // Если movie все еще null, значит фильмов нет вообще
-      if (!movie) {
-        throw new Error("Не удалось загрузить фильм. Попробуйте позже.");
-      }
-      
       // Сохраняем историю
       sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
       
-      showMovie(movie);
+      if (movie) {
+        showMovie(movie);
+      } else {
+        throw new Error("Не удалось загрузить фильм");
+      }
       
     } catch (e) {
       console.error("Ошибка получения фильма", e);
-      showError(e.message || "Не удалось получить фильм. Попробуйте еще раз.");
+      showError("Не удалось получить фильм. Попробуйте еще раз.");
     } finally {
       toggleLoader(false);
     }
