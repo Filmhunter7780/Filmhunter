@@ -6,6 +6,37 @@
   <title>Filmhunter - Умные рекомендации фильмов</title>
   <style>
     /* ... (все стили остаются без изменений) ... */
+    .tmdb-result-card {
+      background: rgba(255,255,255,0.1);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .tmdb-result-card:hover {
+      transform: translateY(-3px);
+      background: rgba(255,255,255,0.15);
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .action-button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .add-custom {
+      background: rgba(0, 176, 155, 0.3);
+    }
+    .cancel-add {
+      background: rgba(142, 45, 226, 0.3);
+    }
   </style>
 
   <!-- Firebase -->
@@ -272,7 +303,9 @@
     
     // Информация об истории
     const historyInfoEl = document.getElementById('historyInfo');
-    historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length} фильмов в этой сессии`;
+    if (historyInfoEl) {
+      historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length} фильмов в этой сессии`;
+    }
     
     // Показываем кнопки оценки
     document.getElementById('ratingControls').style.display = 'block';
@@ -384,7 +417,17 @@
     container.innerHTML = '';
     
     if (results.length === 0) {
-      container.innerHTML = '<p>Фильм не найден в базе TMDB. Будет добавлен как пользовательский.</p>';
+      container.innerHTML = `
+        <p>Фильм не найден в базе TMDB. Вы можете:</p>
+        <div class="action-buttons">
+          <div class="action-button add-custom" onclick="addCustomMovie()">
+            Добавить как пользовательский
+          </div>
+          <div class="action-button cancel-add" onclick="cancelAddMovie()">
+            Отменить
+          </div>
+        </div>
+      `;
       container.style.display = 'block';
       return;
     }
@@ -395,14 +438,6 @@
     results.slice(0, 3).forEach(movie => {
       const movieCard = document.createElement('div');
       movieCard.className = 'tmdb-result-card';
-      movieCard.style = `
-        background: rgba(255,255,255,0.1);
-        padding: 10px;
-        border-radius: 8px;
-        margin: 10px 0;
-        cursor: pointer;
-        transition: transform 0.2s;
-      `;
       movieCard.innerHTML = `
         <div style="display: flex; align-items: center; gap: 15px;">
           ${movie.poster_path ? 
@@ -427,23 +462,23 @@
     });
     
     const customOption = document.createElement('div');
-    customOption.className = 'tmdb-result-card';
-    customOption.style = `
-      background: rgba(255,255,255,0.1);
-      padding: 10px;
-      border-radius: 8px;
-      margin: 10px 0;
-      cursor: pointer;
-      text-align: center;
-      font-weight: bold;
+    customOption.className = 'action-buttons';
+    customOption.innerHTML = `
+      <div class="action-button add-custom" onclick="addCustomMovie()">
+        Добавить как пользовательский
+      </div>
+      <div class="action-button cancel-add" onclick="cancelAddMovie()">
+        Отменить
+      </div>
     `;
-    customOption.textContent = 'Добавить как пользовательский фильм';
-    customOption.addEventListener('click', () => {
-      container.style.display = 'none';
-      addCustomMovie();
-    });
     
     container.appendChild(customOption);
+  }
+
+  // Отменить добавление фильма
+  function cancelAddMovie() {
+    document.getElementById('tmdbSearchResults').style.display = 'none';
+    document.getElementById('newMovieTitle').value = '';
   }
 
   // Выбор фильма из результатов TMDB
@@ -572,6 +607,7 @@
       
       // Очистить поле ввода
       document.getElementById('newMovieTitle').value = '';
+      document.getElementById('tmdbSearchResults').style.display = 'none';
       
       alert('Фильм успешно добавлен! Теперь другие пользователи смогут его оценивать.');
       updateTopMovies();
@@ -610,16 +646,12 @@
       // Ищем фильм в базе TMDB
       const results = await searchMovieOnTMDB(title);
       
-      if (results.length > 0) {
-        // Показываем результаты поиска
-        showTMDBResults(results);
-      } else {
-        // Если не найдено, добавляем как пользовательский
-        addCustomMovie();
-      }
+      // Показываем результаты поиска
+      showTMDBResults(results);
     } catch (err) {
       console.error("Ошибка поиска фильма:", err);
-      addCustomMovie();
+      // При ошибке поиска показываем опции
+      showTMDBResults([]);
     } finally {
       addBtn.disabled = false;
       addBtn.textContent = '➕ Добавить фильм';
