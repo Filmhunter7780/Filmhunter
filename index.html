@@ -369,6 +369,9 @@
     all: [] // Теперь храним ВСЕ показанные фильмы в одном массиве
   };
 
+  // Прокси для обхода CORS
+  const corsProxy = "https://cors-anywhere.herokuapp.com/";
+
   // Показать/скрыть сообщение об ошибке
   function showError(message) {
     const errorEl = document.getElementById('errorMessage');
@@ -394,22 +397,27 @@
       let movie = null;
       
       if (availableTmdbMovies.length > 0) {
+        // Фильтруем фильмы, которые еще не показывались
         const filteredMovies = availableTmdbMovies.filter(m => 
           !shownMoviesHistory.all.includes(m.id)
         );
         
-        const movieToShow = filteredMovies.length > 0 ? 
-          filteredMovies[Math.floor(Math.random() * filteredMovies.length)] :
-          availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
-          
-        movie = movieToShow;
+        // Выбираем случайный фильм из доступных
+        movie = filteredMovies.length > 0 
+          ? filteredMovies[Math.floor(Math.random() * filteredMovies.length)] 
+          : availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
       }
       
-      // Если все фильмы показаны, сбрасываем историю
-      if (!movie) {
+      // Если фильм не найден, пробуем сбросить историю
+      if (!movie && shownMoviesHistory.all.length > 0) {
         shownMoviesHistory.all = [];
         sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
-        return getRandomMovie(); // Повторяем попытку с очищенной историей
+        return getRandomMovie(); // Повторяем попытку
+      }
+      
+      // Если все еще нет фильма, показываем ошибку
+      if (!movie) {
+        throw new Error("Не найдено доступных фильмов");
       }
       
       // Добавляем фильм в историю
@@ -418,11 +426,8 @@
       // Сохраняем историю
       sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
       
-      if (movie) {
-        showMovie(movie);
-      } else {
-        throw new Error("Не удалось загрузить фильм");
-      }
+      // Показываем фильм
+      showMovie(movie);
       
     } catch (e) {
       console.error("Ошибка получения фильма", e);
@@ -436,7 +441,14 @@
   async function getRandomTMDBMovieBatch() {
     try {
       const page = Math.floor(Math.random() * 10) + 1;
-      const res = await fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`);
+      const url = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`;
+      
+      // Используем прокси для обхода CORS
+      const res = await fetch(corsProxy + url, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
       
       if (!res.ok) {
         throw new Error(`Ошибка TMDB: ${res.status} ${res.statusText}`);
@@ -581,7 +593,13 @@
   async function searchMovieOnTMDB(title) {
     try {
       const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ru-RU&query=${encodeURIComponent(title)}`;
-      const res = await fetch(url);
+      
+      // Используем прокси для обхода CORS
+      const res = await fetch(corsProxy + url, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
       
       if (!res.ok) {
         throw new Error(`Ошибка поиска TMDB: ${res.status}`);
@@ -666,7 +684,11 @@
     // Получаем данные о трейлере
     let trailerUrl = null;
     if (tmdbMovie.id) {
-      fetch(`https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`)
+      fetch(corsProxy + `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
         .then(res => res.json())
         .then(data => {
           const trailer = data.results.find(v => v.type === "Trailer" && v.site === "YouTube");
