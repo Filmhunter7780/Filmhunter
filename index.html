@@ -75,27 +75,43 @@
     
     .btn-group {
       display: flex;
-      gap: 10px;
+      gap: 15px;
       justify-content: center;
       margin: 20px 0;
       flex-wrap: wrap;
     }
     
     .btn-group button {
-      padding: 12px 20px;
+      flex: 1;
+      padding: 14px 20px;
       border: none;
       border-radius: 8px;
-      background: linear-gradient(to right, #0ea5e9, #0284c7);
-      color: white;
       font-weight: bold;
       cursor: pointer;
       transition: all 0.3s ease;
-      font-size: 1em;
+      font-size: 1.1em;
+      min-width: 150px;
+      max-width: 250px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    #likeBtn {
+      background: linear-gradient(to right, #10b981, #059669);
+      color: white;
+    }
+    
+    #dislikeBtn {
+      background: linear-gradient(to right, #ef4444, #dc2626);
+      color: white;
     }
     
     .btn-group button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transform: translateY(-3px);
+      box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+    }
+    
+    .btn-group button:active {
+      transform: translateY(1px);
     }
     
     .stats-container {
@@ -244,14 +260,47 @@
       background: linear-gradient(to right, #7c3aed, #6d28d9);
     }
     
+    /* Стили для видеофрагментов */
+    .video-container {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      margin: 20px auto;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      aspect-ratio: 16/9;
+      background: #000;
+    }
+    
+    .video-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    .video-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1e293b;
+      color: #94a3b8;
+      font-style: italic;
+      height: 100%;
+      text-align: center;
+      padding: 20px;
+    }
+    
     /* Адаптивность */
     @media (max-width: 600px) {
       .btn-group {
         flex-direction: column;
+        gap: 10px;
       }
       
       .btn-group button {
         width: 100%;
+        max-width: none;
       }
       
       .action-buttons {
@@ -267,6 +316,10 @@
       }
       
       .main-action-button {
+        max-width: 100%;
+      }
+      
+      .video-container {
         max-width: 100%;
       }
     }
@@ -287,6 +340,7 @@
     <div id="movieTitle">Нажмите кнопку, чтобы получить фильм!</div>
     <div id="moviePoster"></div>
     <div id="movieDescription"></div>
+    <div id="movieVideo"></div> <!-- Контейнер для видеофрагмента -->
     <div id="movieSource"></div>
     <div id="historyInfo" class="history-info"></div>
     <div class="loader" id="loader"></div>
@@ -295,7 +349,6 @@
       <div class="btn-group">
         <button id="likeBtn">👍 Нравится</button>
         <button id="dislikeBtn">👎 Не нравится</button>
-        <button id="trailerBtn">▶️ Трейлер</button>
       </div>
       
       <div class="stats-container">
@@ -425,7 +478,7 @@
       sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
       
       if (movie) {
-        showMovie(movie);
+        await showMovie(movie); // Добавляем await для асинхронной загрузки видео
       } else {
         throw new Error("Не удалось загрузить фильм");
       }
@@ -459,12 +512,48 @@
         description: movie.overview,
         poster: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
         isCustom: false,
-        source: "База TMDB"
+        source: "База TMDB",
+        tmdbId: movie.id // Сохраняем ID для получения видео
       }));
       
     } catch(e) {
       console.error("Ошибка получения фильмов с TMDB", e);
       return [];
+    }
+  }
+
+  // Получить видеофрагмент для фильма
+  async function getMovieVideo(movieId) {
+    try {
+      const url = `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${TMDB_API_KEY}&language=ru-RU`;
+      const res = await fetch(url);
+      
+      if (!res.ok) {
+        throw new Error(`Ошибка получения видео: ${res.status}`);
+      }
+      
+      const data = await res.json();
+      
+      // Ищем русский трейлер
+      const ruTrailer = data.results.find(v => 
+        v.type === "Trailer" && v.site === "YouTube" && v.iso_639_1 === "ru"
+      );
+      
+      // Если русского нет, берем любой трейлер
+      const trailer = ruTrailer || data.results.find(v => 
+        v.type === "Trailer" && v.site === "YouTube"
+      );
+      
+      // Ищем тизер, если трейлер не найден
+      const teaser = trailer || data.results.find(v => 
+        v.type === "Teaser" && v.site === "YouTube"
+      );
+      
+      return teaser ? teaser.key : null;
+      
+    } catch (e) {
+      console.error("Ошибка получения видеофрагмента", e);
+      return null;
     }
   }
 
@@ -489,7 +578,8 @@
           isCustom: true,
           addedBy: data.addedBy,
           addedByName: data.addedByName,
-          source: "Пользовательский фильм"
+          source: "Пользовательский фильм",
+          trailer: data.trailer || null // Сохраняем трейлер
         });
       });
       
@@ -501,7 +591,7 @@
   }
 
   // Показать фильм на странице
-  function showMovie(movie) {
+  async function showMovie(movie) { // Делаем функцию асинхронной
     if (!movie) return;
     
     currentMovie = movie;
@@ -547,6 +637,52 @@
     const historyInfoEl = document.getElementById('historyInfo');
     if (historyInfoEl) {
       historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length} фильмов в этой сессии`;
+    }
+    
+    // Загрузка видеофрагмента
+    const videoContainer = document.getElementById('movieVideo');
+    videoContainer.innerHTML = '<div class="video-placeholder">Загрузка видеофрагмента...</div>';
+    
+    let videoKey = null;
+    
+    try {
+      // Для фильмов из TMDB
+      if (movie.tmdbId) {
+        videoKey = await getMovieVideo(movie.tmdbId);
+      }
+      // Для пользовательских фильмов
+      else if (movie.trailer) {
+        const url = new URL(movie.trailer);
+        videoKey = url.searchParams.get('v');
+      }
+      
+      if (videoKey) {
+        videoContainer.innerHTML = `
+          <div class="video-container">
+            <iframe src="https://www.youtube.com/embed/${videoKey}?rel=0&modestbranding=1" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen></iframe>
+          </div>
+        `;
+      } else {
+        videoContainer.innerHTML = `
+          <div class="video-placeholder">
+            Видеофрагмент недоступен<br>
+            <button id="searchTrailerBtn" style="margin-top: 10px; padding: 8px 15px; background: #0ea5e9; color: white; border: none; border-radius: 5px; cursor: pointer;">
+              🔍 Найти трейлер
+            </button>
+          </div>
+        `;
+        
+        document.getElementById('searchTrailerBtn').addEventListener('click', () => {
+          const query = encodeURIComponent(movie.title + " трейлер");
+          window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+        });
+      }
+    } catch (e) {
+      console.error("Ошибка загрузки видео", e);
+      videoContainer.innerHTML = '<div class="video-placeholder">Ошибка загрузки видеофрагмента</div>';
     }
     
     // Показываем кнопки оценки
@@ -773,7 +909,8 @@
         poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
         isCustom: true,
         addedByName: userName,
-        source: "Пользовательский фильм (из TMDB)"
+        source: "Пользовательский фильм (из TMDB)",
+        trailer: trailerUrl
       });
       
       // Показать добавленный фильм
@@ -784,7 +921,8 @@
         poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
         isCustom: true,
         addedByName: userName,
-        source: "Ваш добавленный фильм (из TMDB)"
+        source: "Ваш добавленный фильм (из TMDB)",
+        trailer: trailerUrl
       });
       
       // Очистить поле ввода
@@ -886,25 +1024,11 @@
     }
   }
 
-  // Показать трейлер
-  function watchTrailer() {
-    if (!currentMovie) return;
-    
-    let url = currentMovie.trailer;
-    if (!url) {
-      const query = encodeURIComponent(currentMovie.title + " трейлер");
-      url = `https://www.youtube.com/results?search_query=${query}`;
-    }
-    
-    window.open(url, '_blank');
-  }
-
   // Инициализация обработчиков событий
   document.getElementById('getMovieBtn').addEventListener('click', getRandomMovie);
   document.getElementById('addMovieBtn').addEventListener('click', addUserMovie);
   document.getElementById('likeBtn').addEventListener('click', () => rateMovie(true));
   document.getElementById('dislikeBtn').addEventListener('click', () => rateMovie(false));
-  document.getElementById('trailerBtn').addEventListener('click', watchTrailer);
 
   // Инициализация при загрузке
   document.addEventListener('DOMContentLoaded', async () => {
