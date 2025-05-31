@@ -362,6 +362,18 @@
     tmdb: []
   };
 
+  // Фильтр нецензурной лексики (можно расширить)
+  const forbiddenWords = [
+    'хуй', 'пизда', 'ебать', 'блядь', 'шлюха', 'сука', 'мудак', 'гандон', 'пидор', 
+    'fuck', 'shit', 'asshole', 'bitch', 'cunt', 'dick', 'piss', 'cock', 'pussy', 'whore'
+  ];
+
+  // Проверка на запрещенные слова
+  function containsForbiddenWords(text) {
+    const lowerText = text.toLowerCase();
+    return forbiddenWords.some(word => lowerText.includes(word));
+  }
+
   // Показать/скрыть сообщение об ошибке
   function showError(message) {
     const errorEl = document.getElementById('errorMessage');
@@ -440,16 +452,7 @@
   async function getRandomTMDBMovieBatch() {
     try {
       const page = Math.floor(Math.random() * 10) + 1;
-      
-      // Используем прокси для обхода CORS
-      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
-      const tmdbUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`;
-      
-      const res = await fetch(proxyUrl + tmdbUrl, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      });
+      const res = await fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`);
       
       if (!res.ok) {
         throw new Error(`Ошибка TMDB: ${res.status} ${res.statusText}`);
@@ -600,8 +603,6 @@
     try {
       const snapshot = await db.collection('movies')
         .where('isCustom', '==', true)
-        .orderBy('likes', 'desc')
-        .limit(10)
         .get();
       
       if (snapshot.empty) {
@@ -620,6 +621,12 @@
           addedByName: data.addedByName || 'Аноним'
         });
       });
+      
+      // Сортируем по лайкам
+      movies.sort((a, b) => (b.likes - b.dislikes) - (a.likes - a.dislikes));
+      
+      // Берем топ-10
+      movies = movies.slice(0, 10);
       
       list.innerHTML = '';
       
@@ -642,15 +649,8 @@
   // Поиск фильма на TMDB
   async function searchMovieOnTMDB(title) {
     try {
-      // Используем прокси для обхода CORS
-      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
       const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ru-RU&query=${encodeURIComponent(title)}`;
-      
-      const res = await fetch(proxyUrl + url, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      });
+      const res = await fetch(url);
       
       if (!res.ok) {
         throw new Error(`Ошибка поиска TMDB: ${res.status}`);
@@ -738,21 +738,19 @@
   function selectTMDBMovie(tmdbMovie) {
     const title = document.getElementById('newMovieTitle').value.trim();
     
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
+      return;
+    }
+    
     // Запрашиваем имя пользователя
     const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
     
     // Получаем данные о трейлере
     let trailerUrl = null;
     if (tmdbMovie.id) {
-      // Используем прокси для обхода CORS
-      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
-      const url = `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`;
-      
-      fetch(proxyUrl + url, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      })
+      fetch(`https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`)
         .then(res => res.json())
         .then(data => {
           const trailer = data.results.find(v => v.type === "Trailer" && v.site === "YouTube");
@@ -832,6 +830,12 @@
       return;
     }
     
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
+      return;
+    }
+    
     // Запрашиваем имя пользователя
     const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
     
@@ -895,6 +899,12 @@
     
     if (title.length > 100) {
       showError('Название фильма слишком длинное');
+      return;
+    }
+    
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
       return;
     }
     
