@@ -365,12 +365,10 @@
   let userRatings = JSON.parse(localStorage.getItem("user_ratings")) || {};
   
   // История показанных фильмов в текущей сессии
-  let shownMoviesHistory = JSON.parse(sessionStorage.getItem('shownMoviesHistory')) || {
-    all: [] // Теперь храним ВСЕ показанные фильмы в одном массиве
-  };
+  let shownMoviesHistory = JSON.parse(sessionStorage.getItem('shownMoviesHistory')) || [];
 
-  // Прокси для обхода CORS
-  const corsProxy = "https://cors-anywhere.herokuapp.com/";
+  // Рабочий прокси для CORS
+  const corsProxy = "https://api.allorigins.win/raw?url=";
 
   // Показать/скрыть сообщение об ошибке
   function showError(message) {
@@ -394,36 +392,33 @@
     try {
       const availableTmdbMovies = await getRandomTMDBMovieBatch();
       
+      if (availableTmdbMovies.length === 0) {
+        throw new Error("Нет доступных фильмов");
+      }
+      
+      // Фильтруем фильмы, которые еще не показывались
+      const filteredMovies = availableTmdbMovies.filter(m => 
+        !shownMoviesHistory.includes(m.id)
+      );
+      
       let movie = null;
       
-      if (availableTmdbMovies.length > 0) {
-        // Фильтруем фильмы, которые еще не показывались
-        const filteredMovies = availableTmdbMovies.filter(m => 
-          !shownMoviesHistory.all.includes(m.id)
-        );
-        
-        // Выбираем случайный фильм из доступных
-        movie = filteredMovies.length > 0 
-          ? filteredMovies[Math.floor(Math.random() * filteredMovies.length)] 
-          : availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
-      }
-      
-      // Если фильм не найден, пробуем сбросить историю
-      if (!movie && shownMoviesHistory.all.length > 0) {
-        shownMoviesHistory.all = [];
-        sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
-        return getRandomMovie(); // Повторяем попытку
-      }
-      
-      // Если все еще нет фильма, показываем ошибку
-      if (!movie) {
-        throw new Error("Не найдено доступных фильмов");
+      // Если есть непоказанные, выбираем случайный
+      if (filteredMovies.length > 0) {
+        movie = filteredMovies[Math.floor(Math.random() * filteredMovies.length)];
+      } 
+      // Если все фильмы показаны, выбираем случайный из всех
+      else {
+        movie = availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
       }
       
       // Добавляем фильм в историю
-      shownMoviesHistory.all.push(movie.id);
+      shownMoviesHistory.push(movie.id);
       
-      // Сохраняем историю
+      // Сохраняем историю (максимум 50 фильмов)
+      if (shownMoviesHistory.length > 50) {
+        shownMoviesHistory = shownMoviesHistory.slice(-50);
+      }
       sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
       
       // Показываем фильм
@@ -443,12 +438,7 @@
       const page = Math.floor(Math.random() * 10) + 1;
       const url = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`;
       
-      // Используем прокси для обхода CORS
-      const res = await fetch(corsProxy + url, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      });
+      const res = await fetch(corsProxy + encodeURIComponent(url));
       
       if (!res.ok) {
         throw new Error(`Ошибка TMDB: ${res.status} ${res.statusText}`);
@@ -502,7 +492,7 @@
     // Информация об истории
     const historyInfoEl = document.getElementById('historyInfo');
     if (historyInfoEl) {
-      historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.all.length} фильмов в этой сессии`;
+      historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.length} фильмов в этой сессии`;
     }
     
     // Показываем кнопки оценки
@@ -548,6 +538,8 @@
     
     try {
       const snapshot = await db.collection('movies')
+        .orderBy('likes', 'desc')
+        .limit(10)
         .get();
       
       if (snapshot.empty) {
@@ -565,12 +557,6 @@
           title: data.title
         });
       });
-      
-      // Сортируем по лайкам
-      movies.sort((a, b) => (b.likes - b.dislikes) - (a.likes - a.dislikes));
-      
-      // Берем топ-10
-      movies = movies.slice(0, 10);
       
       list.innerHTML = '';
       
@@ -594,12 +580,7 @@
     try {
       const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ru-RU&query=${encodeURIComponent(title)}`;
       
-      // Используем прокси для обхода CORS
-      const res = await fetch(corsProxy + url, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      });
+      const res = await fetch(corsProxy + encodeURIComponent(url));
       
       if (!res.ok) {
         throw new Error(`Ошибка поиска TMDB: ${res.status}`);
@@ -618,7 +599,7 @@
     const container = document.getElementById('tmdbSearchResults');
     container.innerHTML = '';
     
-    if (results.length === 0) {
+    if (!results || results.length === 0) {
       container.innerHTML = `
         <p>Фильм не найден в базе TMDB.</p>
         <div class="action-buttons">
@@ -684,11 +665,9 @@
     // Получаем данные о трейлере
     let trailerUrl = null;
     if (tmdbMovie.id) {
-      fetch(corsProxy + `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      })
+      const url = `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`;
+      
+      fetch(corsProxy + encodeURIComponent(url))
         .then(res => res.json())
         .then(data => {
           const trailer = data.results.find(v => v.type === "Trailer" && v.site === "YouTube");
@@ -707,13 +686,21 @@
 
   // Сохранение фильма в Firebase
   async function saveMovieToFirebase(movieData, trailerUrl) {
-    const title = movieData.title || document.getElementById('newMovieTitle').value.trim();
-    
     try {
       const id = `tmdb_${movieData.id}`;
-      await db.collection('movies').doc(id).set({
+      
+      // Проверяем, не существует ли уже фильм
+      const docRef = db.collection('movies').doc(id);
+      const doc = await docRef.get();
+      
+      if (doc.exists) {
+        alert('Этот фильм уже есть в базе!');
+        return;
+      }
+      
+      await docRef.set({
         id,
-        title,
+        title: movieData.title,
         description: movieData.overview || null,
         poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
         trailer: trailerUrl || null,
@@ -727,6 +714,7 @@
       
       // Очистить поле ввода
       document.getElementById('newMovieTitle').value = '';
+      document.getElementById('tmdbSearchResults').style.display = 'none';
       
       updateTopMovies();
       
