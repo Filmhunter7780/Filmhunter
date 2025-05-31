@@ -5,37 +5,270 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Filmhunter - Умные рекомендации фильмов</title>
   <style>
-    /* ... (все стили остаются без изменений) ... */
-    .tmdb-result-card {
-      background: rgba(255,255,255,0.1);
+    /* Основные стили */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: #e6e6e6;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+    
+    h1 {
+      text-align: center;
+      color: #f8f9fa;
+      margin-bottom: 30px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 25px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    
+    .section-title {
+      color: #0ea5e9;
+      border-bottom: 2px solid #0ea5e9;
+      padding-bottom: 10px;
+      margin-top: 0;
+    }
+    
+    .poster {
+      max-width: 300px;
+      border-radius: 10px;
+      margin: 15px auto;
+      display: block;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    
+    .btn-group button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(to right, #0ea5e9, #0284c7);
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 1em;
+    }
+    
+    .btn-group button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    #getMovieBtn {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(to right, #8b5cf6, #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 15px;
+    }
+    
+    #getMovieBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    }
+    
+    .stats-container {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    
+    .stat-item {
+      text-align: center;
+      padding: 10px;
+      min-width: 90px;
+    }
+    
+    .stat-value {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #0ea5e9;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .stat-label {
+      font-size: 0.9em;
+      opacity: 0.8;
+      margin-top: 5px;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 1em;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+    }
+    
+    input[type="text"]::placeholder {
+      color: #aaa;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px #0ea5e9;
+    }
+    
+    .loader {
+      border: 5px solid rgba(255,255,255,0.1);
+      border-top: 5px solid #0ea5e9;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+      display: none;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      background: rgba(220, 38, 38, 0.2);
+      color: #f87171;
       padding: 10px;
       border-radius: 8px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    
+    .history-info {
+      font-size: 0.9em;
+      opacity: 0.8;
+      text-align: center;
       margin: 10px 0;
+    }
+    
+    .user-badge, .source-badge {
+      display: inline-block;
+      background: rgba(14, 165, 233, 0.2);
+      padding: 5px 10px;
+      border-radius: 20px;
+      margin: 5px 5px 5px 0;
+      font-size: 0.85em;
+    }
+    
+    .source-badge {
+      background: rgba(139, 92, 246, 0.2);
+    }
+    
+    #topList {
+      padding-left: 20px;
+    }
+    
+    #topList li {
+      margin-bottom: 15px;
+      padding: 10px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+    }
+    
+    /* Стили для поиска TMDB */
+    .tmdb-result-card {
+      background: rgba(255,255,255,0.1);
+      padding: 15px;
+      border-radius: 10px;
+      margin: 15px 0;
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: all 0.3s ease;
     }
+    
     .tmdb-result-card:hover {
-      transform: translateY(-3px);
+      transform: translateY(-5px);
       background: rgba(255,255,255,0.15);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
     }
+    
     .action-buttons {
       display: flex;
       gap: 10px;
       margin-top: 15px;
+      flex-wrap: wrap;
     }
+    
     .action-button {
       flex: 1;
-      padding: 10px;
+      padding: 12px;
       border-radius: 8px;
       text-align: center;
       cursor: pointer;
       font-weight: bold;
+      min-width: 150px;
+      transition: all 0.3s ease;
     }
+    
     .add-custom {
       background: rgba(0, 176, 155, 0.3);
     }
+    
+    .add-custom:hover {
+      background: rgba(0, 176, 155, 0.5);
+    }
+    
     .cancel-add {
       background: rgba(142, 45, 226, 0.3);
+    }
+    
+    .cancel-add:hover {
+      background: rgba(142, 45, 226, 0.5);
+    }
+    
+    /* Адаптивность */
+    @media (max-width: 600px) {
+      .btn-group {
+        flex-direction: column;
+      }
+      
+      .btn-group button {
+        width: 100%;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+      }
+      
+      .action-button {
+        width: 100%;
+      }
+      
+      .card {
+        padding: 15px;
+      }
     }
   </style>
 
@@ -109,6 +342,11 @@
   // Инициализация Firebase
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+
+  // Настройка для стабильной работы
+  db.settings({
+    experimentalForceLongPolling: true
+  });
 
   const TMDB_API_KEY = "31c2dc8e1c46207fe56c63f8a6c723ce";
   const uid = localStorage.getItem("filmhunter_uid") || Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -202,7 +440,16 @@
   async function getRandomTMDBMovieBatch() {
     try {
       const page = Math.floor(Math.random() * 10) + 1;
-      const res = await fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`);
+      
+      // Используем прокси для обхода CORS
+      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
+      const tmdbUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`;
+      
+      const res = await fetch(proxyUrl + tmdbUrl, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
       
       if (!res.ok) {
         throw new Error(`Ошибка TMDB: ${res.status} ${res.statusText}`);
@@ -244,6 +491,8 @@
         customMoviesCache.push({
           id: doc.id,
           title: data.title,
+          description: data.description || null,
+          poster: data.poster || null,
           isCustom: true,
           addedBy: data.addedBy,
           addedByName: data.addedByName,
@@ -351,6 +600,8 @@
     try {
       const snapshot = await db.collection('movies')
         .where('isCustom', '==', true)
+        .orderBy('likes', 'desc')
+        .limit(10)
         .get();
       
       if (snapshot.empty) {
@@ -369,11 +620,6 @@
           addedByName: data.addedByName || 'Аноним'
         });
       });
-      
-      // Сортируем по лайкам
-      movies.sort((a, b) => b.likes - a.likes);
-      // Берем топ-10
-      movies = movies.slice(0, 10);
       
       list.innerHTML = '';
       
@@ -396,8 +642,15 @@
   // Поиск фильма на TMDB
   async function searchMovieOnTMDB(title) {
     try {
+      // Используем прокси для обхода CORS
+      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
       const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ru-RU&query=${encodeURIComponent(title)}`;
-      const res = await fetch(url);
+      
+      const res = await fetch(proxyUrl + url, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
       
       if (!res.ok) {
         throw new Error(`Ошибка поиска TMDB: ${res.status}`);
@@ -491,7 +744,15 @@
     // Получаем данные о трейлере
     let trailerUrl = null;
     if (tmdbMovie.id) {
-      fetch(`https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`)
+      // Используем прокси для обхода CORS
+      const proxyUrl = "https://cors-anywhere.herokuapp.com/";
+      const url = `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`;
+      
+      fetch(proxyUrl + url, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      })
         .then(res => res.json())
         .then(data => {
           const trailer = data.results.find(v => v.type === "Trailer" && v.site === "YouTube");
