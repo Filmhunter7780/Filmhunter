@@ -19,8 +19,30 @@
     h1 {
       text-align: center;
       color: #f8f9fa;
-      margin-bottom: 30px;
+      margin-bottom: 15px;
       text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .main-action-button {
+      display: block;
+      width: 100%;
+      max-width: 300px;
+      padding: 15px;
+      background: linear-gradient(to right, #8b5cf6, #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin: 0 auto 25px;
+      text-align: center;
+    }
+    
+    .main-action-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
     }
     
     .card {
@@ -74,25 +96,6 @@
     .btn-group button:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    
-    #getMovieBtn {
-      width: 100%;
-      padding: 15px;
-      background: linear-gradient(to right, #8b5cf6, #7c3aed);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 1.1em;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin-top: 15px;
-    }
-    
-    #getMovieBtn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
     }
     
     .stats-container {
@@ -269,6 +272,10 @@
       .card {
         padding: 15px;
       }
+      
+      .main-action-button {
+        max-width: 100%;
+      }
     }
   </style>
 
@@ -278,6 +285,9 @@
 </head>
 <body>
   <h1>🎬 Filmhunter</h1>
+  
+  <!-- Главная кнопка "Получить случайный фильм" -->
+  <button id="getMovieBtn" class="main-action-button">🎲 Получить случайный фильм</button>
   
   <div class="card">
     <h2 class="section-title">Фильм дня</h2>
@@ -311,7 +321,6 @@
       </div>
     </div>
 
-    <button id="getMovieBtn">🎲 Получить случайный фильм</button>
     <div id="errorMessage" class="error-message" style="display:none;"></div>
   </div>
 
