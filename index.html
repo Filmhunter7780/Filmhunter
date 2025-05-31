@@ -332,7 +332,7 @@
   </div>
 
   <div class="card">
-    <h2 class="section-title">🏆 Топ фильмов</h2>
+    <h2 class="section-title">🏆 Топ пользовательских фильмов</h2>
     <ol id="topList"></ol>
   </div>
 
@@ -363,12 +363,25 @@
 
   let currentMovie = null;
   let userRatings = JSON.parse(localStorage.getItem("user_ratings")) || {};
+  let customMoviesCache = [];
   
   // История показанных фильмов в текущей сессии
-  let shownMoviesHistory = JSON.parse(sessionStorage.getItem('shownMoviesHistory')) || [];
+  let shownMoviesHistory = JSON.parse(sessionStorage.getItem('shownMoviesHistory')) || {
+    custom: [],
+    tmdb: []
+  };
 
-  // Рабочий прокси для CORS
-  const corsProxy = "https://api.allorigins.win/raw?url=";
+  // Фильтр нецензурной лексики (можно расширить)
+  const forbiddenWords = [
+    'хуй', 'пизда', 'ебать', 'блядь', 'шлюха', 'сука', 'мудак', 'гандон', 'пидор', 
+    'fuck', 'shit', 'asshole', 'bitch', 'cunt', 'dick', 'piss', 'cock', 'pussy', 'whore'
+  ];
+
+  // Проверка на запрещенные слова
+  function containsForbiddenWords(text) {
+    const lowerText = text.toLowerCase();
+    return forbiddenWords.some(word => lowerText.includes(word));
+  }
 
   // Показать/скрыть сообщение об ошибке
   function showError(message) {
@@ -390,39 +403,51 @@
     document.getElementById('errorMessage').style.display = 'none';
     
     try {
-      const availableTmdbMovies = await getRandomTMDBMovieBatch();
-      
-      if (availableTmdbMovies.length === 0) {
-        throw new Error("Нет доступных фильмов");
-      }
-      
-      // Фильтруем фильмы, которые еще не показывались
-      const filteredMovies = availableTmdbMovies.filter(m => 
-        !shownMoviesHistory.includes(m.id)
-      );
+      // Рассчитываем баланс с учётом истории
+      const totalShown = shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length;
+      const customRatio = totalShown > 3 ? 0.2 : 0.4; // После 3 просмотров уменьшаем долю пользовательских
+      const useCustom = Math.random() < customRatio;
       
       let movie = null;
       
-      // Если есть непоказанные, выбираем случайный
-      if (filteredMovies.length > 0) {
-        movie = filteredMovies[Math.floor(Math.random() * filteredMovies.length)];
-      } 
-      // Если все фильмы показаны, выбираем случайный из всех
-      else {
-        movie = availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
+      // Пытаемся получить пользовательский фильм, который ещё не показывали
+      if (useCustom && customMoviesCache.length > 0) {
+        const availableCustomMovies = customMoviesCache.filter(m => 
+          !shownMoviesHistory.custom.includes(m.id)
+        );
+        
+        if (availableCustomMovies.length > 0) {
+          const randomIndex = Math.floor(Math.random() * availableCustomMovies.length);
+          movie = availableCustomMovies[randomIndex];
+          shownMoviesHistory.custom.push(movie.id);
+        }
       }
       
-      // Добавляем фильм в историю
-      shownMoviesHistory.push(movie.id);
-      
-      // Сохраняем историю (максимум 50 фильмов)
-      if (shownMoviesHistory.length > 50) {
-        shownMoviesHistory = shownMoviesHistory.slice(-50);
+      // Если пользовательский не найден, берём TMDB
+      if (!movie) {
+        const availableTmdbMovies = await getRandomTMDBMovieBatch();
+        if (availableTmdbMovies.length > 0) {
+          const filteredMovies = availableTmdbMovies.filter(m => 
+            !shownMoviesHistory.tmdb.includes(m.id)
+          );
+          
+          const movieToShow = filteredMovies.length > 0 ? 
+            filteredMovies[Math.floor(Math.random() * filteredMovies.length)] :
+            availableTmdbMovies[Math.floor(Math.random() * availableTmdbMovies.length)];
+            
+          movie = movieToShow;
+          shownMoviesHistory.tmdb.push(movie.id);
+        }
       }
+      
+      // Сохраняем историю
       sessionStorage.setItem('shownMoviesHistory', JSON.stringify(shownMoviesHistory));
       
-      // Показываем фильм
-      showMovie(movie);
+      if (movie) {
+        showMovie(movie);
+      } else {
+        throw new Error("Не удалось загрузить фильм");
+      }
       
     } catch (e) {
       console.error("Ошибка получения фильма", e);
@@ -436,9 +461,7 @@
   async function getRandomTMDBMovieBatch() {
     try {
       const page = Math.floor(Math.random() * 10) + 1;
-      const url = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`;
-      
-      const res = await fetch(corsProxy + encodeURIComponent(url));
+      const res = await fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=${page}`);
       
       if (!res.ok) {
         throw new Error(`Ошибка TMDB: ${res.status} ${res.statusText}`);
@@ -454,12 +477,45 @@
         title: movie.title,
         description: movie.overview,
         poster: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
+        isCustom: false,
         source: "База TMDB"
       }));
       
     } catch(e) {
       console.error("Ошибка получения фильмов с TMDB", e);
       return [];
+    }
+  }
+
+  // Загрузить пользовательские фильмы в кэш
+  async function loadCustomMovies() {
+    try {
+      const snapshot = await db.collection('movies')
+        .where('isCustom', '==', true)
+        .get();
+      
+      customMoviesCache = [];
+      
+      if (snapshot.empty) return;
+      
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        customMoviesCache.push({
+          id: doc.id,
+          title: data.title,
+          description: data.description || null,
+          poster: data.poster || null,
+          isCustom: true,
+          addedBy: data.addedBy,
+          addedByName: data.addedByName,
+          source: "Пользовательский фильм"
+        });
+      });
+      
+      console.log(`Загружено ${customMoviesCache.length} пользовательских фильмов`);
+      
+    } catch (e) {
+      console.error("Ошибка загрузки пользовательских фильмов", e);
     }
   }
 
@@ -474,25 +530,42 @@
     const posterContainer = document.getElementById('moviePoster');
     posterContainer.innerHTML = '';
     
-    // Добавляем постер
-    const img = document.createElement('img');
-    img.src = movie.poster;
-    img.alt = movie.title;
-    img.className = 'poster';
-    posterContainer.appendChild(img);
+    // Добавляем постер, если он есть
+    if (movie.poster) {
+      const img = document.createElement('img');
+      img.src = movie.poster;
+      img.alt = movie.title;
+      img.className = 'poster';
+      posterContainer.appendChild(img);
+    } else {
+      posterContainer.innerHTML = '<div class="poster" style="display:flex;align-items:center;justify-content:center;background:#2c3e50;color:#fff;font-size:1.2em;">🎬 Фильм сообщества</div>';
+    }
     
     // Описание
     const descriptionEl = document.getElementById('movieDescription');
-    descriptionEl.textContent = movie.description;
+    if (movie.description) {
+      descriptionEl.textContent = movie.description;
+    } else {
+      descriptionEl.textContent = "Этот фильм был предложен нашим сообществом. Помогите оценить его!";
+    }
     
     // Информация об источнике
     const sourceEl = document.getElementById('movieSource');
-    sourceEl.innerHTML = `<div class="source-badge">${movie.source}</div>`;
+    sourceEl.innerHTML = '';
+    
+    if (movie.isCustom && movie.addedByName) {
+      sourceEl.innerHTML = `
+        <div class="user-badge">Предложил: ${movie.addedByName}</div>
+        <div class="source-badge">${movie.source || "Пользовательский фильм"}</div>
+      `;
+    } else if (movie.source) {
+      sourceEl.innerHTML = `<div class="source-badge">${movie.source}</div>`;
+    }
     
     // Информация об истории
     const historyInfoEl = document.getElementById('historyInfo');
     if (historyInfoEl) {
-      historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.length} фильмов в этой сессии`;
+      historyInfoEl.textContent = `Вы уже посмотрели ${shownMoviesHistory.custom.length + shownMoviesHistory.tmdb.length} фильмов в этой сессии`;
     }
     
     // Показываем кнопки оценки
@@ -531,19 +604,18 @@
     }
   }
 
-  // Обновить топ фильмов
+  // Обновить топ пользовательских фильмов
   async function updateTopMovies() {
     const list = document.getElementById('topList');
     list.innerHTML = '<li>Загрузка рейтинга...</li>';
     
     try {
       const snapshot = await db.collection('movies')
-        .orderBy('likes', 'desc')
-        .limit(10)
+        .where('isCustom', '==', true)
         .get();
       
       if (snapshot.empty) {
-        list.innerHTML = "<li>Пока нет оценённых фильмов</li>";
+        list.innerHTML = "<li>Пока нет пользовательских фильмов</li>";
         return;
       }
       
@@ -554,9 +626,16 @@
           id: doc.id,
           likes: data.likes || 0,
           dislikes: data.dislikes || 0,
-          title: data.title
+          title: data.title,
+          addedByName: data.addedByName || 'Аноним'
         });
       });
+      
+      // Сортируем по лайкам
+      movies.sort((a, b) => (b.likes - b.dislikes) - (a.likes - a.dislikes));
+      
+      // Берем топ-10
+      movies = movies.slice(0, 10);
       
       list.innerHTML = '';
       
@@ -565,6 +644,7 @@
         li.innerHTML = `
           <strong>${movie.title}</strong>
           <div>👍 ${movie.likes} | 👎 ${movie.dislikes}</div>
+          <div class="user-badge">Предложил: ${movie.addedByName}</div>
         `;
         list.appendChild(li);
       });
@@ -579,8 +659,7 @@
   async function searchMovieOnTMDB(title) {
     try {
       const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&language=ru-RU&query=${encodeURIComponent(title)}`;
-      
-      const res = await fetch(corsProxy + encodeURIComponent(url));
+      const res = await fetch(url);
       
       if (!res.ok) {
         throw new Error(`Ошибка поиска TMDB: ${res.status}`);
@@ -599,10 +678,13 @@
     const container = document.getElementById('tmdbSearchResults');
     container.innerHTML = '';
     
-    if (!results || results.length === 0) {
+    if (results.length === 0) {
       container.innerHTML = `
-        <p>Фильм не найден в базе TMDB.</p>
+        <p>Фильм не найден в базе TMDB. Вы можете:</p>
         <div class="action-buttons">
+          <div class="action-button add-custom" onclick="addCustomMovie()">
+            Добавить как пользовательский
+          </div>
           <div class="action-button cancel-add" onclick="cancelAddMovie()">
             Отменить
           </div>
@@ -641,15 +723,18 @@
       container.appendChild(movieCard);
     });
     
-    const cancelOption = document.createElement('div');
-    cancelOption.className = 'action-buttons';
-    cancelOption.innerHTML = `
+    const customOption = document.createElement('div');
+    customOption.className = 'action-buttons';
+    customOption.innerHTML = `
+      <div class="action-button add-custom" onclick="addCustomMovie()">
+        Добавить как пользовательский
+      </div>
       <div class="action-button cancel-add" onclick="cancelAddMovie()">
         Отменить
       </div>
     `;
     
-    container.appendChild(cancelOption);
+    container.appendChild(customOption);
   }
 
   // Отменить добавление фильма
@@ -662,60 +747,143 @@
   function selectTMDBMovie(tmdbMovie) {
     const title = document.getElementById('newMovieTitle').value.trim();
     
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
+      return;
+    }
+    
+    // Запрашиваем имя пользователя
+    const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
+    
     // Получаем данные о трейлере
     let trailerUrl = null;
     if (tmdbMovie.id) {
-      const url = `https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`;
-      
-      fetch(corsProxy + encodeURIComponent(url))
+      fetch(`https://api.themoviedb.org/3/movie/${tmdbMovie.id}/videos?api_key=${TMDB_API_KEY}`)
         .then(res => res.json())
         .then(data => {
           const trailer = data.results.find(v => v.type === "Trailer" && v.site === "YouTube");
           if (trailer) {
             trailerUrl = `https://www.youtube.com/watch?v=${trailer.key}`;
           }
-          saveMovieToFirebase(tmdbMovie, trailerUrl);
+          saveMovieToFirebase(tmdbMovie, userName, trailerUrl);
         })
         .catch(() => {
-          saveMovieToFirebase(tmdbMovie, null);
+          saveMovieToFirebase(tmdbMovie, userName, null);
         });
     } else {
-      saveMovieToFirebase(tmdbMovie, null);
+      saveMovieToFirebase(tmdbMovie, userName, null);
     }
   }
 
   // Сохранение фильма в Firebase
-  async function saveMovieToFirebase(movieData, trailerUrl) {
+  async function saveMovieToFirebase(movieData, userName, trailerUrl) {
+    const title = movieData.title || document.getElementById('newMovieTitle').value.trim();
+    
     try {
-      const id = `tmdb_${movieData.id}`;
-      
-      // Проверяем, не существует ли уже фильм
-      const docRef = db.collection('movies').doc(id);
-      const doc = await docRef.get();
-      
-      if (doc.exists) {
-        alert('Этот фильм уже есть в базе!');
-        return;
-      }
-      
-      await docRef.set({
+      const id = `custom_${Date.now()}`;
+      await db.collection('movies').doc(id).set({
         id,
-        title: movieData.title,
+        title,
         description: movieData.overview || null,
         poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
         trailer: trailerUrl || null,
         likes: 0,
         dislikes: 0,
+        isCustom: true,
+        addedBy: uid,
+        addedByName: userName,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       
-      // Показать сообщение об успехе
+      // Обновляем кэш
+      customMoviesCache.push({
+        id,
+        title,
+        description: movieData.overview || null,
+        poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
+        isCustom: true,
+        addedByName: userName,
+        source: "Пользовательский фильм (из TMDB)"
+      });
+      
+      // Показать добавленный фильм
+      showMovie({
+        id,
+        title,
+        description: movieData.overview || null,
+        poster: movieData.poster_path ? `https://image.tmdb.org/t/p/w500${movieData.poster_path}` : null,
+        isCustom: true,
+        addedByName: userName,
+        source: "Ваш добавленный фильм (из TMDB)"
+      });
+      
+      // Очистить поле ввода
+      document.getElementById('newMovieTitle').value = '';
+      
       alert('Фильм успешно добавлен! Теперь другие пользователи смогут его оценивать.');
+      updateTopMovies();
+      
+    } catch (err) {
+      console.error("Ошибка добавления фильма:", err);
+      showError('Ошибка добавления фильма: ' + err.message);
+    }
+  }
+
+  // Добавить пользовательский фильм без поиска в TMDB
+  async function addCustomMovie() {
+    const title = document.getElementById('newMovieTitle').value.trim();
+    
+    if (!title) {
+      showError('Введите название фильма');
+      return;
+    }
+    
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
+      return;
+    }
+    
+    // Запрашиваем имя пользователя
+    const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
+    
+    try {
+      const id = `custom_${Date.now()}`;
+      await db.collection('movies').doc(id).set({
+        id,
+        title,
+        likes: 0,
+        dislikes: 0,
+        isCustom: true,
+        addedBy: uid,
+        addedByName: userName,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Обновляем кэш
+      customMoviesCache.push({
+        id,
+        title,
+        isCustom: true,
+        addedByName: userName,
+        source: "Пользовательский фильм"
+      });
+      
+      // Показать добавленный фильм
+      showMovie({
+        id,
+        title,
+        isCustom: true,
+        addedByName: userName,
+        source: "Ваш добавленный фильм"
+      });
       
       // Очистить поле ввода
       document.getElementById('newMovieTitle').value = '';
       document.getElementById('tmdbSearchResults').style.display = 'none';
       
+      alert('Фильм успешно добавлен! Теперь другие пользователи смогут его оценивать.');
       updateTopMovies();
       
     } catch (err) {
@@ -740,6 +908,12 @@
     
     if (title.length > 100) {
       showError('Название фильма слишком длинное');
+      return;
+    }
+    
+    // Проверка на нецензурную лексику
+    if (containsForbiddenWords(title)) {
+      showError('Название содержит недопустимые слова');
       return;
     }
     
@@ -833,6 +1007,8 @@
 
   // Инициализация при загрузке
   document.addEventListener('DOMContentLoaded', async () => {
+    // Загружаем пользовательские фильмы
+    await loadCustomMovies();
     updateTopMovies();
     
     // Показать случайный фильм при загрузке
