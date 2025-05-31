@@ -235,20 +235,13 @@
       transition: all 0.3s ease;
     }
     
-    .add-custom {
-      background: rgba(0, 176, 155, 0.3);
-    }
-    
-    .add-custom:hover {
-      background: rgba(0, 176, 155, 0.5);
-    }
-    
     .cancel-add {
-      background: rgba(142, 45, 226, 0.3);
+      background: linear-gradient(to right, #8b5cf6, #7c3aed);
+      color: white;
     }
     
     .cancel-add:hover {
-      background: rgba(142, 45, 226, 0.5);
+      background: linear-gradient(to right, #7c3aed, #6d28d9);
     }
     
     /* Адаптивность */
@@ -370,18 +363,6 @@
     custom: [],
     tmdb: []
   };
-
-  // Фильтр нецензурной лексики (можно расширить)
-  const forbiddenWords = [
-    'хуй', 'пизда', 'ебать', 'блядь', 'шлюха', 'сука', 'мудак', 'гандон', 'пидор', 
-    'fuck', 'shit', 'asshole', 'bitch', 'cunt', 'dick', 'piss', 'cock', 'pussy', 'whore'
-  ];
-
-  // Проверка на запрещенные слова
-  function containsForbiddenWords(text) {
-    const lowerText = text.toLowerCase();
-    return forbiddenWords.some(word => lowerText.includes(word));
-  }
 
   // Показать/скрыть сообщение об ошибке
   function showError(message) {
@@ -680,11 +661,8 @@
     
     if (results.length === 0) {
       container.innerHTML = `
-        <p>Фильм не найден в базе TMDB. Вы можете:</p>
+        <p>Фильм не найден в базе TMDB. Попробуйте другое название.</p>
         <div class="action-buttons">
-          <div class="action-button add-custom" onclick="addCustomMovie()">
-            Добавить как пользовательский
-          </div>
           <div class="action-button cancel-add" onclick="cancelAddMovie()">
             Отменить
           </div>
@@ -723,18 +701,15 @@
       container.appendChild(movieCard);
     });
     
-    const customOption = document.createElement('div');
-    customOption.className = 'action-buttons';
-    customOption.innerHTML = `
-      <div class="action-button add-custom" onclick="addCustomMovie()">
-        Добавить как пользовательский
-      </div>
+    const cancelOption = document.createElement('div');
+    cancelOption.className = 'action-buttons';
+    cancelOption.innerHTML = `
       <div class="action-button cancel-add" onclick="cancelAddMovie()">
         Отменить
       </div>
     `;
     
-    container.appendChild(customOption);
+    container.appendChild(cancelOption);
   }
 
   // Отменить добавление фильма
@@ -746,12 +721,6 @@
   // Выбор фильма из результатов TMDB
   function selectTMDBMovie(tmdbMovie) {
     const title = document.getElementById('newMovieTitle').value.trim();
-    
-    // Проверка на нецензурную лексику
-    if (containsForbiddenWords(title)) {
-      showError('Название содержит недопустимые слова');
-      return;
-    }
     
     // Запрашиваем имя пользователя
     const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
@@ -830,68 +799,6 @@
     }
   }
 
-  // Добавить пользовательский фильм без поиска в TMDB
-  async function addCustomMovie() {
-    const title = document.getElementById('newMovieTitle').value.trim();
-    
-    if (!title) {
-      showError('Введите название фильма');
-      return;
-    }
-    
-    // Проверка на нецензурную лексику
-    if (containsForbiddenWords(title)) {
-      showError('Название содержит недопустимые слова');
-      return;
-    }
-    
-    // Запрашиваем имя пользователя
-    const userName = prompt("Как вас зовут? (будет отображаться как автор фильма)", "Аноним") || "Аноним";
-    
-    try {
-      const id = `custom_${Date.now()}`;
-      await db.collection('movies').doc(id).set({
-        id,
-        title,
-        likes: 0,
-        dislikes: 0,
-        isCustom: true,
-        addedBy: uid,
-        addedByName: userName,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Обновляем кэш
-      customMoviesCache.push({
-        id,
-        title,
-        isCustom: true,
-        addedByName: userName,
-        source: "Пользовательский фильм"
-      });
-      
-      // Показать добавленный фильм
-      showMovie({
-        id,
-        title,
-        isCustom: true,
-        addedByName: userName,
-        source: "Ваш добавленный фильм"
-      });
-      
-      // Очистить поле ввода
-      document.getElementById('newMovieTitle').value = '';
-      document.getElementById('tmdbSearchResults').style.display = 'none';
-      
-      alert('Фильм успешно добавлен! Теперь другие пользователи смогут его оценивать.');
-      updateTopMovies();
-      
-    } catch (err) {
-      console.error("Ошибка добавления фильма:", err);
-      showError('Ошибка добавления фильма: ' + err.message);
-    }
-  }
-
   // Добавить фильм с проверкой в TMDB
   async function addUserMovie() {
     const title = document.getElementById('newMovieTitle').value.trim();
@@ -908,12 +815,6 @@
     
     if (title.length > 100) {
       showError('Название фильма слишком длинное');
-      return;
-    }
-    
-    // Проверка на нецензурную лексику
-    if (containsForbiddenWords(title)) {
-      showError('Название содержит недопустимые слова');
       return;
     }
     
