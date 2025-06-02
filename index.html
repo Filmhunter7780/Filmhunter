@@ -206,6 +206,22 @@
       background: rgba(139, 92, 246, 0.2);
     }
     
+    /* Стили для рейтинга */
+    .rating-badge {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      padding: 5px 10px;
+      border-radius: 20px;
+      margin: 5px 5px 5px 0;
+      font-size: 0.85em;
+    }
+    
+    .rating-value {
+      font-weight: bold;
+      margin-left: 3px;
+    }
+    
     #topList {
       padding-left: 20px;
     }
@@ -513,7 +529,9 @@
         poster: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
         isCustom: false,
         source: "База TMDB",
-        tmdbId: movie.id // Сохраняем ID для получения видео
+        tmdbId: movie.id, // Сохраняем ID для получения видео
+        rating: movie.vote_average, // Добавляем рейтинг
+        voteCount: movie.vote_count // Добавляем количество голосов
       }));
       
     } catch(e) {
@@ -620,7 +638,7 @@
       descriptionEl.textContent = "Этот фильм был предложен нашим сообществом. Помогите оценить его!";
     }
     
-    // Информация об источнике
+    // Информация об источнике и рейтинге
     const sourceEl = document.getElementById('movieSource');
     sourceEl.innerHTML = '';
     
@@ -630,7 +648,23 @@
         <div class="source-badge">${movie.source || "Пользовательский фильм"}</div>
       `;
     } else if (movie.source) {
-      sourceEl.innerHTML = `<div class="source-badge">${movie.source}</div>`;
+      // Добавляем рейтинг для фильмов из TMDB
+      let ratingHtml = '';
+      if (movie.rating && movie.rating > 0) {
+        ratingHtml = `
+          <div class="rating-badge">
+            ★ <span class="rating-value">${movie.rating.toFixed(1)}</span>
+            ${movie.voteCount ? `<span>(${movie.voteCount})</span>` : ''}
+          </div>
+        `;
+      }
+      
+      sourceEl.innerHTML = `
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <div class="source-badge">${movie.source}</div>
+          ${ratingHtml}
+        </div>
+      `;
     }
     
     // Информация об истории
